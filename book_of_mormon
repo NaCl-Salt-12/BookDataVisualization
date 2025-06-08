@@ -1,0 +1,7 @@
+library(tidyverse)
+library(tidytext)
+library(DBI)
+
+# Analysis of the Book of Mormon 
+# Using Sqlite to pull in text 
+

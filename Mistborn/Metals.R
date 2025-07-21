@@ -15,7 +15,7 @@ library(patchwork)
 library(kableExtra)
 library(knitr)
 
-font_add(family = "Trajan Pro", regular = "TrajanPro-Regular.ttf")``
+font_add(family = "Trajan Pro", regular = "TrajanPro-Regular.ttf")
 
 font_add(family = "Times New Roman", regular = "times.ttf")
 
@@ -164,7 +164,7 @@ word_cors<- mist_section %>%
 # Metals table
 
 metals_name<-  str_to_title(c("iron","steel","tin","pewter","zinc","brass","copper","bronze","atium","gold"))
-allomatic_power <- c("Pushes on Nearby of Metals","Pulls on Nearby of Metals","Enhances Senses","Enhances Physical Abilities","Soothes (Dampens) Emotions","Riots (Enflames) Emotions","Hides Allomaic Pulses","Allows One to Hear Allomatic Pulses","See into other People's Futures","See into Your Own Past")
+allomatic_power <- c("Pulls on Nearby Metals","Pushes on Nearby Metals","Enhances Senses","Enhances Physical Abilities","Riots Emotions","Soothes Emotions","Hides Allomaic Pulses","Reveals Allomatic Pulses","See  other People's Futures","See Your Own Past")
 
 all_chart <- tibble(
   METAL = metals_name,
@@ -186,7 +186,7 @@ theme_mistborn <- function() {
     legend.text = element_text(size = 20),
     text = element_text(color = "white"),
     plot.title = element_text(size = 24, family = "Trajan Pro"),
-    plot.subtitle = element_markdown(),
+    plot.subtitle = element_markdown(hjust = 0.5),
     plot.caption = element_markdown(hjust = 1),
     panel.background = element_rect(fill = "#1a0d26", color = NA),
     plot.background = element_rect(fill = "#1a0d26", color = NA)
@@ -279,17 +279,38 @@ mistborn_colors <- c(
 
 ## Metals stream graph:
 
+# key events
+
+# TODO:
+# story_annotations <- tibble(
+#   x    = c(13.5, 1.2, 7, 5, 14, 22),
+#   xend = c(19,   1.2, 7, 5, 14, 22),
+#   y    = c(-5000, -4200, -4500, 5000, 5000, 3000),
+#   yend = c(-5000,  -200,   400,  800, 1000,  500),
+#   vjust = c(   0,  0.25,   0.3,  0.85,  0.9,  0.8),
+#   label = c(
+#     "Macduff & Malcolm decide to go to war against Macbeth",
+#     "Three Witches<br>appear",
+#     "Macbeth kills King Duncan",
+#     "Lady Macbeth & Macbeth<br>plan the murder of King Duncan",
+#     "Murder of Banquo reported to Macbeth,<br>Ghost of Banquo appears",
+#     "Macduff<br>kills<br>Macbeth"
+#     )
+# )
+
 
 stream_graph <- ggplot()+
   geom_vline(data=part_lines,aes(xintercept = chapter_id),color = "grey50",linewidth = .2, linetype = 2)+
-  geom_stream(data = metals_text, aes(x=chapter_id,y=mentions, fill=word),type="mirror")+
+  geom_stream(data = metals_text, aes(x=chapter_id,y=mentions, fill=word),type="mirror",extra_span = 0.1, bw=0.55)+
   geom_text(data = metals_text %>%  group_by(part) %>% summarize(x=min(chapter_id)+n_distinct(chapter_id)/2),
             aes(x,y= -Inf, label = part),
             vjust = -1, hjust = 0.5, color = "grey60",family = "Trajan Pro", size = 5)+
   scale_fill_manual(values = metal_colors)+
-  labs(fill="Metal")+
-  scale_x_continuous(n.breaks = 20)
-  # theme_mistborn()
+  labs(fill="Metal",
+       subtitle = "Distribution of mentions share (number of words)<br> per metal in 
+  each chapter. Parts are separated with vertical lines.")+
+  # scale_x_continuous(n.breaks = 20)
+  theme_mistborn()
 
 stream_graph
 ## Character mentions streamgraph:
@@ -363,7 +384,6 @@ bar_plot
    graph_from_data_frame()
  
  V(graph)$degree <- degree(graph)
-http://127.0.0.1:14737/graphics/786619d9-d713-49ea-9373-f4aa7fe2d562.png
  # Add a node attribute to indicate if the node is in metals_list
  V(graph)$is_metal <- V(graph)$name %in% metals_list
  
@@ -455,10 +475,10 @@ text_1 <- "In the In the book Mistborn: Final Empire the magic system is based a
 
 print(all_chart)
 
-ggsave("stream_mist.svg",plot = stream_graph)
+ggsave("stream_mist.png",plot = stream_graph)
 
 ggsave("bar_mist.png",plot = bar_plot)
 
-ggsave("network_mist.svg",plot = network_Graph)
+ggsave("network_mist.png",plot = network_Graph)
 
-gtsave(ref_table,"ref_table_mist.png")
+gtsave(ref_table,"ref_table_mist2.png")

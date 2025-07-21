@@ -1,14 +1,23 @@
 library(tidyverse)
 library(tidytext)
 library(pdftools)
-library(stringr)
 library(ggstream)
 library(ggtext)
-library(extrafont)
-library(paletteer)
 library(png)
 library(grid)
+library(widyr)
+library(ggraph)
+library(igraph)
+library(showtext)
+library(sysfonts)
+library(gt)
+library(patchwork)
+library(kableExtra)
+library(knitr)
 
+font_add(family = "Trajan Pro", regular = "TrajanPro-Regular.ttf")``
+
+font_add(family = "Times New Roman", regular = "times.ttf")
 
 info <- pdf_fonts("./Mistborn/final_empire.pdf") 
 
@@ -28,8 +37,8 @@ text_lines <- unlist(strsplit(mistborn_text, "\n")) %>%
  # Extract the story text
    story_lines <- text_lines[prologue_line:(ars_arcanum_line - 1)]
    
-   # Identify chapter markers
-   chapter_markers <- which(str_detect(story_lines, "\\b\\d{1,2}\\b") | 
+# Identify chapter markers
+chapter_markers <- which(str_detect(story_lines, "\\b\\d{1,2}\\b") | 
                               str_detect(story_lines, "PROLOGUE$") | 
                               str_detect(story_lines, "EPILOGUE$"))
    
@@ -104,26 +113,68 @@ character_men <- text_df %>%
    left_join(part_lines, join_by(chapter_id==chapter_id)) %>% 
   fill(part)
 
-# == SEDIMENT ANALYSIS ==
 
-mistborn_sed <- text_df %>% 
-  select(chapter_id,word) %>% 
-  inner_join(get_sentiments("afinn")) %>%
-  group_by(chapter_id) %>% 
-  summarize(sentiment_score = sum(value))
+# V3 SEDIMENT ANALYSIS
 
-# V2 SEDIMENT ANALYSIS
+chapter_find <- (str_detect(story_lines, "\\b\\d{1,2}\\b") | 
+                              str_detect(story_lines, "prologue") | 
+                              str_detect(story_lines, "epilogue"))
+ 
+a <- 0
 
-mist_sed <- text_df %>% 
+sentence_df <- str_flatten(story_lines, collapse = " ") %>% 
+  as_tibble() %>% 
+  unnest_sentences(sentence, value) %>% 
+  mutate(line_number = row_number())
+
+sentence_part <- sentence_df %>% 
+  filter(str_detect(sentence, "^\\s+part")) %>% 
+  mutate(part = row_number()) %>% 
+  select(line_number,part)
+
+
+mist_sed3 <- str_flatten(story_lines, collapse = " ") %>% 
+  as_tibble() %>% 
+  unnest_sentences(sentence,value) %>% 
+  mutate(line_number = row_number()) %>% 
+  unnest_tokens(word,sentence) %>% 
   inner_join(get_sentiments("afinn")) %>% 
-  group_by(index = line_number %/% 3) %>%
+  group_by(index = line_number %/% 80) %>%
   summarise(sentiment = sum(value))
 
+
+
+# WORD CORRECLATION
+
+mist_section <- str_flatten(story_lines, collapse = " ") %>% 
+  as_tibble() %>% 
+  unnest_sentences(sentence,value) %>% 
+  mutate(section = row_number() %/% 10) %>% 
+  unnest_tokens(word,sentence) %>% 
+  filter(!word %in% stop_words$word)
+
+word_cors<- mist_section %>% 
+  group_by(word) %>% 
+  filter(n() >= 20) %>% 
+  pairwise_cor(word,section, sort = TRUE) %>% 
+  filter(item1 %in% metals_list | item2 %in% metals_list)
+  
+
+
+# Metals table
+
+metals_name<-  str_to_title(c("iron","steel","tin","pewter","zinc","brass","copper","bronze","atium","gold"))
+allomatic_power <- c("Pushes on Nearby of Metals","Pulls on Nearby of Metals","Enhances Senses","Enhances Physical Abilities","Soothes (Dampens) Emotions","Riots (Enflames) Emotions","Hides Allomaic Pulses","Allows One to Hear Allomatic Pulses","See into other People's Futures","See into Your Own Past")
+
+all_chart <- tibble(
+  METAL = metals_name,
+  EFFECT = allomatic_power
+)
 
 # THEME 
 
 theme_mistborn <- function() {
-  theme_void(base_family = "Forum", base_size = 10) +
+  theme_void(base_family = "Trajan Pro", base_size = 20) +
   theme(
     #plot.background = element_rect(color = NA, fill = "grey8"),
     plot.margin = margin(10, 10, 10, 10),
@@ -131,9 +182,10 @@ theme_mistborn <- function() {
     legend.direction = "horizontal",
     legend.key.height = unit(3, "mm"),
     legend.spacing.y = unit(4, "cm"),
-    legend.text = element_text(size = 9.5),
+    # legend.text = element_text(size = 9.5),
+    legend.text = element_text(size = 20),
     text = element_text(color = "white"),
-    plot.title = element_text(size = 24, family = "Forum"),
+    plot.title = element_text(size = 24, family = "Trajan Pro"),
     plot.subtitle = element_markdown(),
     plot.caption = element_markdown(hjust = 1),
     panel.background = element_rect(fill = "#1a0d26", color = NA),
@@ -144,7 +196,7 @@ theme_mistborn <- function() {
 
 
 theme_mist <- function() {
-  theme_void(base_family = "Forum", base_size = 10) +
+  theme_void(base_family = "Trajan Pro", base_size = 15) +
   theme(
     #plot.background = element_rect(color = NA, fill = "grey8"),
     plot.margin = margin(10, 10, 10, 10),
@@ -152,17 +204,47 @@ theme_mist <- function() {
     legend.direction = "horizontal",
     legend.key.height = unit(3, "mm"),
     legend.spacing.y = unit(4, "cm"),
-    legend.text = element_text(size = 9.5),
-    text = element_text(color = "white"),
-    plot.title = element_text(size = 24, family = "Forum"),
-    plot.subtitle = element_markdown(),
-    plot.caption = element_markdown(hjust = 1),
+    legend.text = element_text(size = 16),
+    text = element_text(color = "#E6E6E6"), # Light gray for general text
+    axis.text = element_text(angle = 45, color = "#B3B3B3"), # Slightly darker gray for axis text
+    axis.title = element_markdown(color = "#E6E6E6"), # Light gray for axis titles
+    plot.title = element_text(color = "#FFFFFF",size = 24),
+    plot.subtitle = element_markdown(color = "#D9D9D9"),
+    plot.caption = element_markdown(color = "#B3B3B3", hjust = 1),
     panel.grid = element_blank(),
-    axis.title = element_markdown(),
     #axis.line = element_line(),
     panel.background = element_rect(fill = "#1a0d26", color = NA),
     plot.background = element_rect(fill = "#1a0d26", color = NA)
   )
+}
+
+
+theme_allomancy <- function() {
+  theme_minimal() +
+    theme(
+      panel.background = element_rect(fill = "#1a0d26", color = NA),
+      plot.background = element_rect(fill = "#1a0d26", color = NA),
+      
+      text = element_text(color = "#E6E6E6"), 
+      axis.text = element_text(color = "#B3B3B3"), 
+      axis.title = element_text(color = "#E6E6E6"),
+      # axis.text = element_blank(),
+      # axis.title = element_blank(),
+      plot.title = element_text(color = "#FFFFFF", face = "bold"), 
+      plot.subtitle = element_text(color = "#D9D9D9"), 
+      plot.caption = element_text(color = "#B3B3B3"), 
+      
+      # Adjusting grid lines for contrast on dark background
+      panel.grid.major = element_line(color = "#3C3C3C", size = 0.3), # Dark gray grid
+      panel.grid.minor = element_line(color = "#2E2E2E", size = 0.15), # Darker gray minor grid
+      
+      # Ensuring legend blends with the dark theme
+      legend.background = element_rect(fill = "#1a0d26", color = NA),
+      legend.text = element_text(color = "#E6E6E6"),
+      legend.title = element_text(color = "#E6E6E6"),
+      
+      axis.ticks = element_blank()
+    )
 }
 
 # COLOR PALETTES:
@@ -198,29 +280,30 @@ mistborn_colors <- c(
 ## Metals stream graph:
 
 
-ggplot()+
+stream_graph <- ggplot()+
   geom_vline(data=part_lines,aes(xintercept = chapter_id),color = "grey50",linewidth = .2, linetype = 2)+
   geom_stream(data = metals_text, aes(x=chapter_id,y=mentions, fill=word),type="mirror")+
   geom_text(data = metals_text %>%  group_by(part) %>% summarize(x=min(chapter_id)+n_distinct(chapter_id)/2),
             aes(x,y= -Inf, label = part),
-            vjust = -1, hjust = 0.5, color = "grey60",family = "Forum", size = 2)+
+            vjust = -1, hjust = 0.5, color = "grey60",family = "Trajan Pro", size = 5)+
   scale_fill_manual(values = metal_colors)+
   labs(fill="Metal")+
-  theme_mistborn()
+  scale_x_continuous(n.breaks = 20)
+  # theme_mistborn()
 
-
+stream_graph
 ## Character mentions streamgraph:
-
-ggplot()+
-  geom_vline(data=part_lines,aes(xintercept = chapter_id),color = "grey50",linewidth = .2, linetype = 2)+
-  geom_stream(data = character_men, aes(x=chapter_id,y=mentions, fill=word),type="mirror")+
-  geom_text(data = character_men %>%  group_by(part) %>% summarize(x=min(chapter_id)+n_distinct(chapter_id)/2),
-            aes(x,y= -Inf, label = part),
-            vjust = -1, hjust = 0.5, color = "grey60",family = "Forum", size = 2)+
-  scale_fill_manual(values = mistborn_colors)+
-  labs(fill="Characters")+
-  theme_mistborn()
-
+# 
+# ggplot()+
+#   geom_vline(data=part_lines,aes(xintercept = chapter_id),color = "grey50",linewidth = .2, linetype = 2)+
+#   geom_stream(data = character_men, aes(x=chapter_id,y=mentions, fill=word),type="mirror")+
+#   geom_text(data = character_men %>%  group_by(part) %>% summarize(x=min(chapter_id)+n_distinct(chapter_id)/2),
+#             aes(x,y= -Inf, label = part),
+#             vjust = -1, hjust = 0.5, color = "grey60",family = "Forum", size = 2)+
+#   scale_fill_manual(values = mistborn_colors)+
+#   labs(fill="Characters")+
+#   theme_mistborn()
+# 
 
 # Metal mention barplot
 
@@ -230,41 +313,152 @@ plot_data <- metals_text %>%
   arrange(desc(total_mentions)) %>% 
   mutate(word = fct_reorder(word, total_mentions))
 
-plot_data %>% 
-  ggplot(aes(y = word, x = total_mentions, fill = word)) +
+bar_plot <- plot_data %>% 
+  ggplot(aes(x = word, y = total_mentions, fill = word)) +
   geom_col() +
   scale_fill_manual(values = metal_colors) +
   guides(fill = "none") +
-  labs(x = "Number of Mentions") +
+  labs(y = "Number of Mentions") +
+  coord_cartesian(clip = 'off')+
   geom_text(aes(label = total_mentions), 
-            color = "white",
-            hjust = -0.2,
-            size = 3.5) +
-  expand_limits(x = max(plot_data$total_mentions) * 1.1) +
-  theme_mistborn() +
+            color = "grey70",
+            hjust = 0.5,
+            vjust = -0.4,
+            # size = 4.5,
+            size = 7.5,
+            family = "Trajan Pro") +
+  # expand_limits(x = max(plot_data$total_mentions) * 1.1) +
+  theme_mist() +
   theme(
-    axis.text.y = element_markdown(),
-    axis.title.x = element_markdown()
+    axis.text.y = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(size = 18,angle = 90),
   )
 
-
+bar_plot
 ## == Sentiment Score plot ==
 
 # TODO: workon theme
-ggplot(mistborn_sed,aes(x=chapter_id,y=sentiment_score))+
-  geom_vline(data=part_lines,aes(xintercept = chapter_id),color = "grey50",linewidth = .2, linetype = 2)+
-  geom_text(data = metals_text %>%  group_by(part) %>% summarize(x=min(chapter_id)+n_distinct(chapter_id)/2),
-            aes(x,y= -Inf, label = part),
-            vjust = -1, hjust = 0.5, color = "grey60",family = "Forum", size = 2)+
-  geom_line(color="lightblue")+
-  theme_mistborn()
+# ggplot(mistborn_sed,aes(x=chapter_id,y=sentiment_score))+
+#   geom_vline(data=part_lines,aes(xintercept = chapter_id),color = "grey50",linewidth = .2, linetype = 2)+
+#   geom_text(data = metals_text %>%  group_by(part) %>% summarize(x=min(chapter_id)+n_distinct(chapter_id)/2),
+#             aes(x,y= -Inf, label = part),
+#             vjust = -1, hjust = 0.5, color = "grey60",family = "Forum", size = 2)+
+#   geom_line(color="lightblue")+
+#   theme_mistborn()
+# 
+# ggplot(mist_sed3,aes(x=index,y=sentiment))+
+#   geom_smooth(se = F, color = "lightblue")+
+#   theme_allomancy()+
+#   theme(axis.text.x = element_blank(),
+#         axis.title.x = element_blank())
+#   
   
- ggplot(mist_sed,aes(x=index,y=sentiment))+
-  # geom_vline(data=part_lines,aes(xintercept = chapter_id),color = "grey50",linewidth = .2, linetype = 2)+
-  # geom_text(data = metals_text %>%  group_by(part) %>% summarize(x=min(chapter_id)+n_distinct(chapter_id)/2),
-            # aes(x,y= -Inf, label = part),
-            # vjust = -1, hjust = 0.5, color = "grey60",family = "Forum", size = 2)+
-  geom_col(fill="lightblue")+
-  theme_mistborn()
-  
+## == Network Graph == 3
+ 
+ set.seed(2000)
 
+ graph <- word_cors %>% 
+   filter(correlation > 0.15) %>%
+   graph_from_data_frame()
+ 
+ V(graph)$degree <- degree(graph)
+http://127.0.0.1:14737/graphics/786619d9-d713-49ea-9373-f4aa7fe2d562.png
+ # Add a node attribute to indicate if the node is in metals_list
+ V(graph)$is_metal <- V(graph)$name %in% metals_list
+ 
+ # Create the plot with conditional highlighting and dot colors
+network_Graph <- graph %>%
+   ggraph(layout = "fr") +
+   geom_edge_link(aes(edge_alpha = correlation, edge_width = correlation), 
+                  show.legend = FALSE, color = "grey40") +
+   geom_node_point(aes(size = degree, color = is_metal)) +
+   scale_color_manual(values = c("FALSE" = "#ff79c6", "TRUE" = "lightblue")) +  # Different colors for metal/non-metal
+   geom_node_label(aes(label = name),
+                  color = "grey95",
+                  fill = "#4D267380",
+                  repel = TRUE,
+                  force = 1,
+                  force_pull = 0.1,
+                  # min.segment.length = 1,
+                  family = "Trajan Pro",
+                  label.size = 0,
+                  size = 3.5) +
+   scale_size_continuous(range = c(3, 10)) + 
+   guides(size ="none",color="none")+
+   theme_mistborn()
+ 
+network_Graph
+ ## == Allomancy Reference ==
+ 
+ref_table <- gt(all_chart) %>% 
+  # tab_header(
+    # title = "ALLOMANCY REFERENCE CHART"
+  # ) %>% 
+  opt_table_font(font = "Times New Roman",color = "#E6E6E6") %>% 
+  tab_style(
+    style = cell_text(
+      align="center",
+      size = px(20)),
+    locations = cells_column_labels()
+  ) %>% 
+  tab_style(
+    style = cell_borders(
+      sides = c("top", "bottom", "left", "right"),
+      color = "transparent",  # Remove all borders from data cells
+      weight = px(0)
+    ),
+    locations = cells_body()
+  ) %>% 
+  tab_options(
+    table.border.top.color = "transparent",    # Remove top table border
+    table.border.bottom.color = "transparent", # Remove bottom table border
+    # data_row.padding = px(5),                  # Optional: Adjust padding for better spacing
+    column_labels.border.top.color = "transparent",
+    # table.background.color = "transparent",
+    table.background.color = "#1a0d26",
+  ) %>% 
+  tab_style(
+    style = cell_borders(
+      sides = "bottom",        # Target only the bottom border
+      color = "transparent",   # Make it invisible
+      weight = px(0)
+    ),
+    locations = cells_title(groups = c("title", "subtitle"))
+  ) %>% 
+  tab_style(
+    style = cell_text(
+      font = "Trajan Pro",        # Set font family for title
+      size = px(16),         # Set font size for title
+    ),
+    locations = cells_title(groups = "title")  # Target title
+  ) %>% 
+  tab_options(
+    data_row.padding.horizontal = px(20),       # Padding for data cells
+    column_labels.padding.horizontal = px(20)   # Padding for column labels
+  ) 
+
+# ref_table + plot_annotation(
+#   # title = "Metals In Mistborn",
+#   # caption = "made by Nathaniel Clark",
+#   theme = 
+#     theme(
+#       plot.title = element_textbox(family = "Trajan Pro", size = 30, hjust = 0.5,color = "white"),
+#       plot.background = element_rect(fill = "#1a0d26", color = NA)
+#     ),
+# )
+ref_table
+# wrap_table(ref_table,space = "fixed") + stream_graph + bar_plot + network_Graph
+
+
+text_1 <- "In the In the book Mistborn: Final Empire the magic system is based around individuals, known as Allomancers, who gain supernatural abilities by ingesting and \"burning\" specific metals. Each metal grants a unique power, such as enhanced strength, heightened senses, or emotional manipulation. Allomancers are either Mistings, capable of burning one metal, or Mistborn, who can burn all metals"
+
+print(all_chart)
+
+ggsave("stream_mist.svg",plot = stream_graph)
+
+ggsave("bar_mist.png",plot = bar_plot)
+
+ggsave("network_mist.svg",plot = network_Graph)
+
+gtsave(ref_table,"ref_table_mist.png")
